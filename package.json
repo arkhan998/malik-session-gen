@@ -1,0 +1,1 @@
+{"dependencies":{"@whiskeysockets/baileys":"7.0.0-rc14","dotenv":"^18.0.8","express":"^4.19.2","megajs":"^1.3.0"},"description":"WhatsApp session-ID generator for the MALIK-MD bot (pairing-code flow, uploads creds to Mega)","engines":{"node":"20.x"},"license":"MIT","main":"server.js","name":"malik-session-gen","scripts":{"start":"node server.js"},"version":"1.0.0"}

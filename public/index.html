@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MALIK-MD Session Generator</title>
+<meta name="description" content="Generate your MALIK-MD WhatsApp bot SESSION_ID via pairing code." />
+<style>
+  :root {
+    --bg: #0b0b12; --card: #15151d; --border: #26262e;
+    --text: #e8e8ec; --muted: #a0a0ab;
+    --orange: #ff7a1a; --pink: #ff2e88; --blue: #00b4ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 1.2rem;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+    width: 100%; max-width: 440px; padding: 1.8rem 1.5rem; text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  .brand {
+    font-size: 1.5rem; font-weight: 800; letter-spacing: 2px; margin-bottom: .2rem;
+    background: linear-gradient(90deg, var(--orange), var(--pink), var(--blue));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { color: var(--muted); font-size: .9rem; margin-bottom: 1.4rem; }
+  label { display: block; text-align: left; font-size: .85rem; color: var(--muted); margin-bottom: .4rem; }
+  input {
+    width: 100%; padding: .85rem 1rem; border-radius: 12px; font-size: 1.05rem;
+    background: #0e0e14; border: 1px solid var(--border); color: var(--text);
+    outline: none; margin-bottom: 1rem;
+  }
+  input:focus { border-color: var(--pink); box-shadow: 0 0 0 2px rgba(255,46,136,.25); }
+  button {
+    width: 100%; padding: .9rem; border: none; border-radius: 12px; cursor: pointer;
+    font-size: 1rem; font-weight: 700; color: #0d1117;
+    background: linear-gradient(135deg, var(--orange), var(--pink), var(--blue));
+  }
+  button:disabled { opacity: .5; cursor: wait; }
+  .ghost {
+    background: transparent; color: var(--text); border: 1px solid var(--border); margin-top: .7rem;
+  }
+  .hidden { display: none; }
+  .code {
+    font-size: 2.6rem; font-weight: 800; letter-spacing: 6px; margin: 1rem 0;
+    background: linear-gradient(90deg, var(--orange), var(--pink), var(--blue));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .steps { text-align: left; font-size: .92rem; color: var(--muted); line-height: 1.7; margin: 1rem 0; }
+  .steps b { color: var(--text); }
+  .session-box {
+    background: #0e0e14; border: 1px dashed var(--pink); border-radius: 12px;
+    padding: .9rem; font-family: monospace; font-size: .8rem; word-break: break-all;
+    margin: 1rem 0; color: #ffd9e8; text-align: left;
+  }
+  .note { font-size: .82rem; color: var(--muted); margin-top: .8rem; line-height: 1.6; }
+  .error { color: #ff6b6b; font-size: .9rem; margin-top: .8rem; }
+  .spinner {
+    width: 34px; height: 34px; margin: 1rem auto; border-radius: 50%;
+    border: 3px solid var(--border); border-top-color: var(--pink);
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .timer { font-size: .8rem; color: var(--muted); margin-top: .5rem; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">MALIK-MD</div>
+    <div class="sub">Session ID Generator / سیشن جنریٹر</div>
+
+    <!-- STEP 1 -->
+    <div id="step1">
+      <label for="phone">WhatsApp number (digits only / صرف ہندسے)</label>
+      <input id="phone" inputmode="numeric" placeholder="923001234567" maxlength="15" />
+      <button id="btnPair" onclick="startPair()">Get Pairing Code</button>
+      <div class="note">Apna WhatsApp number likho (country code ke saath, baghair + ke).<br/>Enter your WhatsApp number with country code, digits only.</div>
+      <div id="err1" class="error hidden"></div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div id="step2" class="hidden">
+      <div class="sub">Ye code WhatsApp mein dalo / Enter this code in WhatsApp:</div>
+      <div class="code" id="pairCode">----</div>
+      <div class="steps">
+        <b>1.</b> WhatsApp kholo → Settings → Linked Devices<br/>
+        <b>2.</b> "Link a Device" dabao<br/>
+        <b>3.</b> <b>"Link with phone number instead"</b> chuno<br/>
+        <b>4.</b> Upar wala 8-digit code dalo
+      </div>
+      <div class="spinner"></div>
+      <div class="sub" id="waitMsg">Waiting for you to pair…</div>
+      <div class="timer" id="timer"></div>
+      <div id="err2" class="error hidden"></div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div id="step3" class="hidden">
+      <div class="sub">✅ Connected! Ye hai tumhara SESSION_ID:</div>
+      <div class="session-box" id="sessionId"></div>
+      <button onclick="copySession()">Copy Session ID</button>
+      <div class="note">Isay apne bot ke <b>SESSION_ID</b> mein paste karo (Render/Heroku env vars).<br/>⚠️ Ye tumhare WhatsApp ka login hai — kisi se share mat karo.</div>
+    </div>
+  </div>
+
+<script>
+  let token = null, pollTimer = null, deadline = 0, tickTimer = null;
+
+  function show(id){ document.getElementById(id).classList.remove('hidden'); }
+  function hide(id){ document.getElementById(id).classList.add('hidden'); }
+  function err(id, msg){
+    const e = document.getElementById(id);
+    e.textContent = msg; e.classList.remove('hidden');
+  }
+
+  async function startPair(){
+    const phone = document.getElementById('phone').value.replace(/\D/g,'');
+    document.getElementById('err1').classList.add('hidden');
+    if (!/^\d{10,15}$/.test(phone)) { err('err1','Number 10-15 digits ka hona chahiye (e.g. 923001234567).'); return; }
+    const btn = document.getElementById('btnPair');
+    btn.disabled = true; btn.textContent = 'Please wait…';
+    try {
+      const r = await fetch('/api/pair', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ phone })
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Request failed');
+      token = j.token;
+      document.getElementById('pairCode').textContent = j.code;
+      hide('step1'); show('step2');
+      deadline = Date.now() + 4*60*1000;
+      tickTimer = setInterval(tick, 1000);
+      pollTimer = setInterval(poll, 3000);
+      poll();
+    } catch(e){ err('err1', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Get Pairing Code'; }
+  }
+
+  function tick(){
+    const left = Math.max(0, deadline - Date.now());
+    const m = Math.floor(left/60000), s = Math.floor((left%60000)/1000);
+    document.getElementById('timer').textContent = 'Code expires in ' + m + ':' + String(s).padStart(2,'0');
+  }
+
+  async function poll(){
+    try {
+      const r = await fetch('/api/status/' + token);
+      const j = await r.json();
+      if (j.status === 'connected' && j.sessionId) {
+        clearInterval(pollTimer); clearInterval(tickTimer);
+        document.getElementById('sessionId').textContent = j.sessionId;
+        hide('step2'); show('step3');
+      } else if (j.status === 'expired') {
+        clearInterval(pollTimer); clearInterval(tickTimer);
+        err('err2','Code expire ho gaya. Page refresh karke dobara try karo.');
+      } else if (j.status === 'error') {
+        clearInterval(pollTimer); clearInterval(tickTimer);
+        err('err2','Kuch ghalat hua. Dobara try karo.');
+      }
+    } catch(e){ /* keep polling */ }
+  }
+
+  function copySession(){
+    const t = document.getElementById('sessionId').textContent;
+    navigator.clipboard.writeText(t).then(()=>alert('Copied! ✅'));
+  }
+</script>
+</body>
+</html>
