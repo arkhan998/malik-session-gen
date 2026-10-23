@@ -131,8 +131,39 @@ function watchConnection(token, rec, sock, dir) {
         rec.status = "expired";
         cleanup(token, "logged out");
       }
+      // Pairing kamyab hone ke BAAD WhatsApp 515 (restart required)
+      // bhejta hai — ye error nahi, pairing ka akhri step hai. Wohi
+      // session dobara connect karo: is dafa connection "open" ho gi
+      // aur SESSION_ID ban jayegi.
+      if (code === DisconnectReason.restartRequired) {
+        rec.reconnects = (rec.reconnects || 0) + 1;
+        if (rec.reconnects <= 3) {
+          console.log(`[${token}] pairing restart — reconnecting (${rec.reconnects})...`);
+          try {
+            sock.ws?.close();
+          } catch (_) {}
+          launchSocket(token, rec, dir);
+        }
+      }
     }
   });
+}
+
+// Ek socket bana kar record se jod deta hai — pehli dafa bhi aur
+// 515-restart ke baad dobara connect karne ke liye bhi.
+function launchSocket(token, rec, dir) {
+  const sock = makeWASocket({
+    version: rec.version,
+    auth: rec.state,
+    printQRInTerminal: false,
+    browser: ["MALIK-MD Session", "Chrome", "1.0"],
+    syncFullHistory: false,
+    markOnlineOnConnect: false,
+  });
+  sock.ev.on("creds.update", rec.saveCreds);
+  rec.sock = sock;
+  watchConnection(token, rec, sock, dir);
+  return sock;
 }
 
 app.post("/api/pair", async (req, res) => {
@@ -154,25 +185,17 @@ app.post("/api/pair", async (req, res) => {
     const { state, saveCreds } = await useMultiFileAuthState(dir);
     const { version } = await fetchLatestBaileysVersion();
 
-    const sock = makeWASocket({
-      version,
-      auth: state,
-      printQRInTerminal: false, // deprecated in v7; pairing-code only
-      browser: ["MALIK-MD Session", "Chrome", "1.0"],
-      syncFullHistory: false,
-      markOnlineOnConnect: false,
-    });
-    sock.ev.on("creds.update", saveCreds);
-
-    const rec = { sock, phone, createdAt: Date.now(), done: false, status: "waiting", sessionId: null };
+    const rec = { sock: null, phone, state, saveCreds, version, createdAt: Date.now(), done: false, status: "waiting", sessionId: null, qrImage: null, reconnects: 0 };
     rec.timeout = setTimeout(() => {
       rec.status = "expired";
       cleanup(token, "timeout (4 min)");
     }, 4 * 60 * 1000);
     pending.set(token, rec);
 
+    launchSocket(token, rec, dir);
+
     // If already registered (edge case), fail fast
-    if (sock.authState?.creds?.registered) {
+    if (state.creds?.registered) {
       cleanup(token, "already registered");
       return res.status(400).json({ error: "This session is already registered." });
     }
@@ -186,7 +209,7 @@ app.post("/api/pair", async (req, res) => {
       let lastErr;
       for (let i = 0; i < 3; i++) {
         try {
-          return await sock.requestPairingCode(phone);
+          return await rec.sock.requestPairingCode(phone);
         } catch (e) {
           lastErr = e;
           if (!/connection closed/i.test(e.message)) throw e;
@@ -206,8 +229,6 @@ app.post("/api/pair", async (req, res) => {
 
     // Format XXXX-XXXX
     const pretty = code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
-
-    watchConnection(token, rec, sock, dir);
 
     return res.json({ token, code: pretty });
   } catch (err) {
@@ -233,24 +254,14 @@ app.post("/api/qr", async (req, res) => {
     const { state, saveCreds } = await useMultiFileAuthState(dir);
     const { version } = await fetchLatestBaileysVersion();
 
-    const sock = makeWASocket({
-      version,
-      auth: state,
-      printQRInTerminal: false,
-      browser: ["MALIK-MD Session", "Chrome", "1.0"],
-      syncFullHistory: false,
-      markOnlineOnConnect: false,
-    });
-    sock.ev.on("creds.update", saveCreds);
-
-    const rec = { sock, phone: null, createdAt: Date.now(), done: false, status: "waiting", sessionId: null, qrImage: null };
+    const rec = { sock: null, phone: null, state, saveCreds, version, createdAt: Date.now(), done: false, status: "waiting", sessionId: null, qrImage: null, reconnects: 0 };
     rec.timeout = setTimeout(() => {
       rec.status = "expired";
       cleanup(token, "timeout (4 min)");
     }, 4 * 60 * 1000);
     pending.set(token, rec);
 
-    watchConnection(token, rec, sock, dir);
+    launchSocket(token, rec, dir);
     return res.json({ token });
   } catch (err) {
     console.error("qr error:", err.message);

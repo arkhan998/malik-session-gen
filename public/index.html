@@ -110,6 +110,7 @@
         <b>2.</b> "Link a Device" dabao<br/>
         <b>3.</b> Upar wala QR scan kar lo
       </div>
+      <div class="note">Har QR sirf ~20 second chalta hai — lekin ghabrana nahi, naya QR khud screen par aa jata hai. Neeche wala time puri session ki window hai, us ke andar scan kar lo.</div>
       <div class="sub" id="waitMsgQr">QR ban raha hai…</div>
       <div class="timer" id="timerQr"></div>
       <div id="errQr" class="error hidden"></div>
@@ -161,10 +162,10 @@
   function tick(){
     const left = Math.max(0, deadline - Date.now());
     const m = Math.floor(left/60000), s = Math.floor((left%60000)/1000);
-    const t = 'Expires in ' + m + ':' + String(s).padStart(2,'0');
-    document.getElementById('timer').textContent = t;
+    const t = m + ':' + String(s).padStart(2,'0');
+    document.getElementById('timer').textContent = 'Expires in ' + t;
     const tq = document.getElementById('timerQr');
-    if (tq) tq.textContent = t;
+    if (tq) tq.textContent = 'Session window: ' + t;
   }
 
   async function startQr(){
