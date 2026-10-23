@@ -127,9 +127,28 @@ app.post("/api/pair", async (req, res) => {
       return res.status(400).json({ error: "This session is already registered." });
     }
 
+    // WhatsApp se pura handshake hone ka intezar karo — socket bante hi
+    // code mangne par aksar "Connection Closed" aa jata hai. Thora ruk
+    // kar, aur band ho jaye to dobara koshish karke code mango.
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function requestCodeWithRetry() {
+      await sleep(3000);
+      let lastErr;
+      for (let i = 0; i < 3; i++) {
+        try {
+          return await sock.requestPairingCode(phone);
+        } catch (e) {
+          lastErr = e;
+          if (!/connection closed/i.test(e.message)) throw e;
+          await sleep(2500);
+        }
+      }
+      throw lastErr;
+    }
+
     let code;
     try {
-      code = await sock.requestPairingCode(phone);
+      code = await requestCodeWithRetry();
     } catch (err) {
       cleanup(token, "pairing-code request failed: " + err.message);
       return res.status(500).json({ error: "Could not request pairing code: " + err.message });
