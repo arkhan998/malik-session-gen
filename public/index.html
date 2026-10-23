@@ -79,6 +79,7 @@
       <label for="phone">WhatsApp number (digits only / صرف ہندسے)</label>
       <input id="phone" inputmode="numeric" placeholder="923001234567" maxlength="15" />
       <button id="btnPair" onclick="startPair()">Get Pairing Code</button>
+      <button class="ghost" id="btnQr" onclick="startQr()">📷 QR Code se pair karo (asaan)</button>
       <div class="note">Apna WhatsApp number likho (country code ke saath, baghair + ke).<br/>Enter your WhatsApp number with country code, digits only.</div>
       <div id="err1" class="error hidden"></div>
     </div>
@@ -97,6 +98,21 @@
       <div class="sub" id="waitMsg">Waiting for you to pair…</div>
       <div class="timer" id="timer"></div>
       <div id="err2" class="error hidden"></div>
+    </div>
+
+    <!-- STEP 2 (QR) -->
+    <div id="step2qr" class="hidden">
+      <div class="sub">Ye QR WhatsApp se scan karo / Scan this QR in WhatsApp:</div>
+      <div class="spinner" id="qrSpin"></div>
+      <img id="qrImg" class="hidden" alt="WhatsApp QR code" style="width:264px;height:264px;border-radius:12px;background:#fff;padding:8px;" />
+      <div class="steps">
+        <b>1.</b> Doosre phone par WhatsApp kholo → Settings → Linked Devices<br/>
+        <b>2.</b> "Link a Device" dabao<br/>
+        <b>3.</b> Upar wala QR scan kar lo
+      </div>
+      <div class="sub" id="waitMsgQr">QR ban raha hai…</div>
+      <div class="timer" id="timerQr"></div>
+      <div id="errQr" class="error hidden"></div>
     </div>
 
     <!-- STEP 3 -->
@@ -145,23 +161,52 @@
   function tick(){
     const left = Math.max(0, deadline - Date.now());
     const m = Math.floor(left/60000), s = Math.floor((left%60000)/1000);
-    document.getElementById('timer').textContent = 'Code expires in ' + m + ':' + String(s).padStart(2,'0');
+    const t = 'Expires in ' + m + ':' + String(s).padStart(2,'0');
+    document.getElementById('timer').textContent = t;
+    const tq = document.getElementById('timerQr');
+    if (tq) tq.textContent = t;
+  }
+
+  async function startQr(){
+    document.getElementById('err1').classList.add('hidden');
+    const btn = document.getElementById('btnQr');
+    btn.disabled = true; btn.textContent = 'Please wait…';
+    try {
+      const r = await fetch('/api/qr', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Request failed');
+      token = j.token;
+      hide('step1'); show('step2qr');
+      deadline = Date.now() + 4*60*1000;
+      tickTimer = setInterval(tick, 1000);
+      pollTimer = setInterval(poll, 2000);
+      poll();
+    } catch(e){ err('err1', e.message); }
+    finally { btn.disabled = false; btn.textContent = '📷 QR Code se pair karo (asaan)'; }
   }
 
   async function poll(){
     try {
       const r = await fetch('/api/status/' + token);
       const j = await r.json();
+      if (j.qrImage) {
+        const img = document.getElementById('qrImg');
+        img.src = j.qrImage; img.classList.remove('hidden');
+        document.getElementById('qrSpin').classList.add('hidden');
+        document.getElementById('waitMsgQr').textContent = 'Waiting for you to scan…';
+      }
       if (j.status === 'connected' && j.sessionId) {
         clearInterval(pollTimer); clearInterval(tickTimer);
         document.getElementById('sessionId').textContent = j.sessionId;
-        hide('step2'); show('step3');
+        hide('step2'); hide('step2qr'); show('step3');
       } else if (j.status === 'expired') {
         clearInterval(pollTimer); clearInterval(tickTimer);
-        err('err2','Code expire ho gaya. Page refresh karke dobara try karo.');
+        if (!document.getElementById('step2qr').classList.contains('hidden')) err('errQr','QR expire ho gaya. Page refresh karke dobara try karo.');
+        else err('err2','Code expire ho gaya. Page refresh karke dobara try karo.');
       } else if (j.status === 'error') {
         clearInterval(pollTimer); clearInterval(tickTimer);
-        err('err2','Kuch ghalat hua. Dobara try karo.');
+        if (!document.getElementById('step2qr').classList.contains('hidden')) err('errQr','Kuch ghalat hua. Dobara try karo.');
+        else err('err2','Kuch ghalat hua. Dobara try karo.');
       }
     } catch(e){ /* keep polling */ }
   }
